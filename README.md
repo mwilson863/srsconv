@@ -49,6 +49,9 @@ pipeline as well as with files.
   writing a file Anki won't read back correctly.
 - With `#html:true` (Anki's default), a literal `<br>` in a field is
   read back as a newline, and newlines are written out the same way.
+- `#` lines are only read as header directives before the first data
+  row; a card whose front field happens to start with `#` (a code
+  snippet, a hashtag) is parsed as a normal card, not swallowed.
 - `sm2json`'s `due` is `null` for a card that has never been scheduled.
 
 ## Development

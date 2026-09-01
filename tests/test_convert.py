@@ -43,6 +43,29 @@ ANKI_PARSE_CASES = [
         "A &amp; B\tC &lt; D\n",
         [Card(front="A &amp; B", back="C &lt; D")],
     ),
+    (
+        "hash_in_field_after_data_started",
+        "Plain card\tanswer\n#include <stdio.h>\tC standard I/O header\n",
+        [
+            Card(front="Plain card", back="answer"),
+            Card(front="#include <stdio.h>", back="C standard I/O header"),
+        ],
+    ),
+    (
+        "whitespace_only_tags_column",
+        "Capital of Spain?\tMadrid\t   \n",
+        [Card(front="Capital of Spain?", back="Madrid")],
+    ),
+    (
+        "extra_trailing_column_is_ignored",
+        "Term\tDefinition\ttagone\tnote-guid-1234\n",
+        [Card(front="Term", back="Definition", tags=("tagone",))],
+    ),
+    (
+        "crlf_line_endings",
+        "Q1\tA1\r\nQ2\tA2\r\n",
+        [Card(front="Q1", back="A1"), Card(front="Q2", back="A2")],
+    ),
 ]
 
 

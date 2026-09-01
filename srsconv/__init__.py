@@ -50,12 +50,17 @@ def parse_anki_txt(text: str) -> list:
     """
     html_mode = True
     rows = []
+    in_header = True
     for line in text.splitlines():
-        if not line:
-            continue
-        if line.startswith("#"):
+        if in_header and line.startswith("#"):
             if line.startswith("#html:"):
                 html_mode = line.split(":", 1)[1].strip().lower() == "true"
+            continue
+        # Header directives only appear before the first data row, so a
+        # card whose front field happens to start with '#' (e.g. a C
+        # #include snippet) isn't mistaken for one and dropped.
+        in_header = False
+        if not line:
             continue
         rows.append(line)
 
