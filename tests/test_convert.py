@@ -94,6 +94,57 @@ class TestAnkiTxt(unittest.TestCase):
         cards = [Card(front="Q1\nmore", back="A1", tags=("x", "y::z"))]
         self.assertEqual(parse_anki_txt(write_anki_txt(cards)), cards)
 
+    def test_parse_rejects_unknown_separator(self):
+        with self.assertRaises(FormatError):
+            parse_anki_txt("#separator:tilde\n#html:true\nQ~A\n")
+
+    def test_write_rejects_unknown_separator(self):
+        with self.assertRaises(FormatError):
+            write_anki_txt([Card(front="Q", back="A")], separator="tilde")
+
+
+# Each case: (name, anki_txt_body, expected_cards)
+ANKI_COMMA_PARSE_CASES = [
+    (
+        "plain_fields",
+        "What is 2+2?,4\n",
+        [Card(front="What is 2+2?", back="4")],
+    ),
+    (
+        "quoted_field_containing_separator",
+        '"Cost, in dollars?",5,money\n',
+        [Card(front="Cost, in dollars?", back="5", tags=("money",))],
+    ),
+    (
+        "doubled_quote_escapes_literal_quote",
+        '"She said ""hi""",greeting\n',
+        [Card(front='She said "hi"', back="greeting")],
+    ),
+]
+
+
+class TestAnkiTxtCommaSeparator(unittest.TestCase):
+    def test_parse_cases(self):
+        header = "#separator:comma\n#html:true\n"
+        for name, body, expected in ANKI_COMMA_PARSE_CASES:
+            with self.subTest(name=name):
+                self.assertEqual(parse_anki_txt(header + body), expected)
+
+    def test_write_quotes_field_containing_separator(self):
+        cards = [Card(front="Cost, in dollars?", back="5", tags=("money",))]
+        text = write_anki_txt(cards, separator="comma")
+        self.assertIn('#separator:comma', text.splitlines())
+        self.assertIn('"Cost, in dollars?",5,money', text)
+
+    def test_round_trip_through_comma_separator(self):
+        cards = [
+            Card(front="Q, with comma", back='A "quoted"', tags=("tag,one", "tag two")),
+            Card(front="Plain", back="Simple"),
+        ]
+        self.assertEqual(
+            parse_anki_txt(write_anki_txt(cards, separator="comma")), cards
+        )
+
 
 # Each case: (name, sm2json_line, expected_card)
 SM2JSON_PARSE_CASES = [

@@ -15,10 +15,23 @@ just front/back would.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from dataclasses import dataclass
 
 DEFAULT_EFACTOR = 2.5
+
+# Names Anki itself writes into the '#separator:' header line, and the
+# literal character each one means.
+SEPARATORS = {
+    "tab": "\t",
+    "comma": ",",
+    "semicolon": ";",
+    "pipe": "|",
+    "colon": ":",
+    "space": " ",
+}
 
 
 class FormatError(ValueError):
@@ -40,21 +53,50 @@ class Card:
 # Anki plain text export (Notes menu > Export > Notes in Plain Text)
 # ---------------------------------------------------------------------------
 
-def parse_anki_txt(text: str) -> list:
-    """Parse Anki's tab-separated notes export into Cards.
+def _split_row(line: str, delimiter: str) -> list:
+    """Split one data line on delimiter, honoring '"'-quoting for non-tab separators.
 
-    Header lines (starting with '#') are read for '#html:' to decide
-    whether '<br>' in a field means a line break. Columns are
-    front, back, and an optional space-separated tags column; an empty
-    or missing tags column means no tags.
+    Anki's tab export never quotes fields (a literal tab is simply
+    disallowed), but its comma/semicolon/pipe/colon/space exports quote
+    any field containing the delimiter, using doubled quotes to escape a
+    literal '"'. csv.reader implements exactly that quoting rule.
+    """
+    if delimiter == "\t":
+        return line.split("\t")
+    return next(csv.reader([line], delimiter=delimiter, quotechar='"'))
+
+
+def _join_row(fields: list, delimiter: str) -> str:
+    if delimiter == "\t":
+        return "\t".join(fields)
+    buf = io.StringIO()
+    csv.writer(buf, delimiter=delimiter, quotechar='"', lineterminator="").writerow(fields)
+    return buf.getvalue()
+
+
+def parse_anki_txt(text: str) -> list:
+    """Parse an Anki notes export into Cards.
+
+    Header lines (starting with '#') are read for '#separator:' (tab,
+    comma, semicolon, pipe, colon, or space - the names Anki itself
+    writes there; tab is assumed if the header is absent) and '#html:'
+    to decide whether '<br>' in a field means a line break. Columns are
+    front, back, and an optional tags column (space-separated tags); an
+    empty or missing tags column means no tags.
     """
     html_mode = True
+    delimiter = "\t"
     rows = []
     in_header = True
     for line in text.splitlines():
         if in_header and line.startswith("#"):
             if line.startswith("#html:"):
                 html_mode = line.split(":", 1)[1].strip().lower() == "true"
+            elif line.startswith("#separator:"):
+                name = line.split(":", 1)[1].strip().lower()
+                if name not in SEPARATORS:
+                    raise FormatError(f"unsupported #separator value: {name!r}")
+                delimiter = SEPARATORS[name]
             continue
         # Header directives only appear before the first data row, so a
         # card whose front field happens to start with '#' (e.g. a C
@@ -66,7 +108,7 @@ def parse_anki_txt(text: str) -> list:
 
     cards = []
     for line in rows:
-        parts = line.split("\t")
+        parts = _split_row(line, delimiter)
         if len(parts) < 2:
             raise FormatError(f"expected front and back columns, got: {line!r}")
         front, back = parts[0], parts[1]
@@ -79,19 +121,22 @@ def parse_anki_txt(text: str) -> list:
     return cards
 
 
-def write_anki_txt(cards, html_mode: bool = True) -> str:
+def write_anki_txt(cards, html_mode: bool = True, separator: str = "tab") -> str:
     """Render Cards as an Anki plain text notes export, dropping schedule state."""
-    lines = ["#separator:tab", f"#html:{'true' if html_mode else 'false'}"]
+    if separator not in SEPARATORS:
+        raise FormatError(f"unsupported separator: {separator!r}")
+    delimiter = SEPARATORS[separator]
+    lines = [f"#separator:{separator}", f"#html:{'true' if html_mode else 'false'}"]
     for card in cards:
         front, back = card.front, card.back
-        if "\t" in front or "\t" in back:
+        if delimiter == "\t" and ("\t" in front or "\t" in back):
             raise FormatError("Anki plain text export cannot contain literal tabs in a field")
         if html_mode:
             front = front.replace("\n", "<br>")
             back = back.replace("\n", "<br>")
         elif "\n" in front or "\n" in back:
             raise FormatError("multi-line field requires html_mode=True to encode as <br>")
-        lines.append("\t".join([front, back, " ".join(card.tags)]))
+        lines.append(_join_row([front, back, " ".join(card.tags)], delimiter))
     return "\n".join(lines) + "\n"
 
 
@@ -152,6 +197,6 @@ def anki_to_sm2json(text: str, today: str) -> str:
     return write_sm2json(cards)
 
 
-def sm2json_to_anki(text: str) -> str:
+def sm2json_to_anki(text: str, separator: str = "tab") -> str:
     """Export sm2json cards as Anki notes, dropping scheduling state."""
-    return write_anki_txt(parse_sm2json(text))
+    return write_anki_txt(parse_sm2json(text), separator=separator)

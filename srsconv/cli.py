@@ -4,7 +4,7 @@ import argparse
 import datetime
 import sys
 
-from srsconv import FormatError, anki_to_sm2json, sm2json_to_anki
+from srsconv import SEPARATORS, FormatError, anki_to_sm2json, sm2json_to_anki
 
 
 def _read(path: str) -> str:
@@ -41,6 +41,12 @@ def main(argv=None) -> int:
     json2anki = sub.add_parser("json2anki", help="sm2json -> Anki notes export")
     json2anki.add_argument("infile", help="sm2json file, or '-' for stdin")
     json2anki.add_argument("-o", "--outfile", default="-", help="output path, or '-' for stdout")
+    json2anki.add_argument(
+        "--separator",
+        default="tab",
+        choices=sorted(SEPARATORS),
+        help="column separator for the Anki export (default: tab)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -49,7 +55,7 @@ def main(argv=None) -> int:
             today = args.today or datetime.date.today().isoformat()
             _write(args.outfile, anki_to_sm2json(_read(args.infile), today))
         elif args.command == "json2anki":
-            _write(args.outfile, sm2json_to_anki(_read(args.infile)))
+            _write(args.outfile, sm2json_to_anki(_read(args.infile), args.separator))
     except FormatError as exc:
         print(f"srsconv: {exc}", file=sys.stderr)
         return 1

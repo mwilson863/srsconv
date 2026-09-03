@@ -5,9 +5,11 @@ much smaller personal tool that implements the SM-2 algorithm directly.
 Moving cards between the two meant hand-editing files, so this converts
 between:
 
-- **Anki plain text export** — the tab-separated file you get from
+- **Anki plain text export** — the file you get from
   `Notes > Export > Notes in Plain Text`: front, back, and an optional
-  space-separated tags column.
+  space-separated tags column, separated by whatever character you
+  picked in the export dialog (tab, comma, semicolon, pipe, colon, or
+  space).
 - **sm2json** — this project's own format, one JSON object per line,
   that also carries SM-2 scheduling state: interval, repetitions,
   easiness factor, and due date.
@@ -39,14 +41,28 @@ Going the other way, scheduling fields in the input are simply dropped:
 $ python -m srsconv.cli json2anki cards.jsonl -o deck.txt
 ```
 
+`anki2json` reads the separator from the input file's own `#separator:`
+header line, so tab and comma exports both import without any extra
+flags. `json2anki` writes tab-separated by default; pass `--separator`
+(`comma`, `semicolon`, `pipe`, `colon`, or `space`) to write one of the
+others instead:
+
+```console
+$ python -m srsconv.cli json2anki cards.jsonl --separator comma -o deck.csv
+```
+
 Both subcommands accept `-` for stdin/stdout, so they compose with a shell
 pipeline as well as with files.
 
 ## Format notes
 
-- Fields in the Anki format can't contain literal tab characters (that's
-  the column separator); the converter raises `FormatError` rather than
-  writing a file Anki won't read back correctly.
+- Fields in a tab-separated Anki file can't contain literal tab
+  characters (that's the column separator); the converter raises
+  `FormatError` rather than writing a file Anki won't read back
+  correctly. Non-tab separators (comma, semicolon, pipe, colon, space)
+  don't have this restriction: a field containing the separator, or a
+  literal `"`, is quoted the way Anki itself quotes it (wrapped in `"`,
+  with `"` doubled inside).
 - With `#html:true` (Anki's default), a literal `<br>` in a field is
   read back as a newline, and newlines are written out the same way.
 - `#` lines are only read as header directives before the first data
