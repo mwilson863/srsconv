@@ -54,6 +54,15 @@ $ python -m srsconv.cli json2anki cards.jsonl --separator comma -o deck.csv
 Both subcommands accept `-` for stdin/stdout, so they compose with a shell
 pipeline as well as with files.
 
+Pass `--dry-run` to either subcommand to validate the input without writing
+anything; it reports the number of valid cards (or the same `FormatError`
+you'd get otherwise) and exits accordingly, ignoring `-o`/`--outfile`:
+
+```console
+$ python -m srsconv.cli anki2json cards.txt --dry-run
+srsconv: 2 card(s) valid, no errors
+```
+
 ## Format notes
 
 - Fields in a tab-separated Anki file can't contain literal tab

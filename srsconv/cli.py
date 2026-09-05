@@ -4,7 +4,14 @@ import argparse
 import datetime
 import sys
 
-from srsconv import SEPARATORS, FormatError, anki_to_sm2json, sm2json_to_anki
+from srsconv import (
+    SEPARATORS,
+    FormatError,
+    parse_anki_txt,
+    parse_sm2json,
+    write_anki_txt,
+    write_sm2json,
+)
 
 
 def _read(path: str) -> str:
@@ -37,6 +44,11 @@ def main(argv=None) -> int:
         default=None,
         help="due date (YYYY-MM-DD) to stamp on imported cards; defaults to today",
     )
+    anki2json.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="validate the input and report errors without writing output",
+    )
 
     json2anki = sub.add_parser("json2anki", help="sm2json -> Anki notes export")
     json2anki.add_argument("infile", help="sm2json file, or '-' for stdin")
@@ -47,15 +59,30 @@ def main(argv=None) -> int:
         choices=sorted(SEPARATORS),
         help="column separator for the Anki export (default: tab)",
     )
+    json2anki.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="validate the input and report errors without writing output",
+    )
 
     args = parser.parse_args(argv)
 
     try:
         if args.command == "anki2json":
-            today = args.today or datetime.date.today().isoformat()
-            _write(args.outfile, anki_to_sm2json(_read(args.infile), today))
+            cards = parse_anki_txt(_read(args.infile))
+            if args.dry_run:
+                print(f"srsconv: {len(cards)} card(s) valid, no errors", file=sys.stderr)
+            else:
+                today = args.today or datetime.date.today().isoformat()
+                for card in cards:
+                    card.due = today
+                _write(args.outfile, write_sm2json(cards))
         elif args.command == "json2anki":
-            _write(args.outfile, sm2json_to_anki(_read(args.infile), args.separator))
+            cards = parse_sm2json(_read(args.infile))
+            if args.dry_run:
+                print(f"srsconv: {len(cards)} card(s) valid, no errors", file=sys.stderr)
+            else:
+                _write(args.outfile, write_anki_txt(cards, separator=args.separator))
     except FormatError as exc:
         print(f"srsconv: {exc}", file=sys.stderr)
         return 1
