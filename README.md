@@ -63,6 +63,24 @@ $ python -m srsconv.cli anki2json cards.txt --dry-run
 srsconv: 2 card(s) valid, no errors
 ```
 
+## SM-2 grading
+
+The personal flashcard tool this converter feeds does its own scheduling
+with `srsconv.grade_card`, a plain SM-2 implementation:
+
+```python
+from srsconv import grade_card
+
+card = grade_card(card, quality=4)  # quality: 0 (blackout) to 5 (perfect)
+```
+
+It returns an updated copy of the card (interval, repetitions, easiness
+factor, and due date all recomputed) rather than mutating the one passed
+in. A quality below 3 is a lapse: repetitions resets to 0 and the card
+comes back due tomorrow, no matter how long its interval had grown.
+There's no CLI command for this yet - it's called directly from the
+personal app's review loop, not part of the anki2json/json2anki pipeline.
+
 ## Format notes
 
 - Fields in a tab-separated Anki file can't contain literal tab

@@ -16,11 +16,13 @@ just front/back would.
 from __future__ import annotations
 
 import csv
+import datetime
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 DEFAULT_EFACTOR = 2.5
+MIN_EFACTOR = 1.3
 
 # Names Anki itself writes into the '#separator:' header line, and the
 # literal character each one means.
@@ -47,6 +49,44 @@ class Card:
     repetitions: int = 0
     efactor: float = DEFAULT_EFACTOR
     due: "str | None" = None  # ISO 8601 date, None if never scheduled
+
+
+# ---------------------------------------------------------------------------
+# SM-2 grading
+# ---------------------------------------------------------------------------
+
+def grade_card(card: Card, quality: int, today: "str | None" = None) -> Card:
+    """Apply one SM-2 review to card, returning an updated copy.
+
+    quality is graded 0-5 on SuperMemo's own scale (0 = complete blackout,
+    3 = correct with serious difficulty, 5 = perfect recall). Anything
+    below 3 counts as a lapse: repetitions resets to 0 and the card is due
+    again tomorrow, regardless of its previous interval. today is an ISO
+    8601 date string the interval is measured from; it defaults to the
+    real current date so callers doing a live review don't have to pass it.
+    """
+    if not isinstance(quality, int) or not 0 <= quality <= 5:
+        raise ValueError(f"quality must be an integer 0-5, got {quality!r}")
+
+    if quality < 3:
+        repetitions = 0
+        interval = 1
+    else:
+        repetitions = card.repetitions + 1
+        if repetitions == 1:
+            interval = 1
+        elif repetitions == 2:
+            interval = 6
+        else:
+            interval = round(card.interval * card.efactor)
+
+    efactor = card.efactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+    efactor = max(efactor, MIN_EFACTOR)
+
+    base = datetime.date.fromisoformat(today) if today else datetime.date.today()
+    due = (base + datetime.timedelta(days=interval)).isoformat()
+
+    return replace(card, interval=interval, repetitions=repetitions, efactor=efactor, due=due)
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import unittest
 from srsconv import (
     Card,
     FormatError,
+    grade_card,
     parse_anki_txt,
     parse_sm2json,
     write_anki_txt,
@@ -192,6 +193,64 @@ class TestSm2Json(unittest.TestCase):
 
     def test_write_empty_list_produces_empty_string(self):
         self.assertEqual(write_sm2json([]), "")
+
+
+class TestGradeCard(unittest.TestCase):
+    def test_first_correct_review_sets_interval_one(self):
+        card = Card(front="Q", back="A")
+        graded = grade_card(card, 4, today="2026-09-01")
+        self.assertEqual(graded.interval, 1)
+        self.assertEqual(graded.repetitions, 1)
+        self.assertEqual(graded.due, "2026-09-02")
+
+    def test_second_correct_review_sets_interval_six(self):
+        card = Card(front="Q", back="A", interval=1, repetitions=1)
+        graded = grade_card(card, 4, today="2026-09-01")
+        self.assertEqual(graded.interval, 6)
+        self.assertEqual(graded.repetitions, 2)
+        self.assertEqual(graded.due, "2026-09-07")
+
+    def test_third_correct_review_multiplies_by_efactor(self):
+        card = Card(front="Q", back="A", interval=6, repetitions=2, efactor=2.5)
+        graded = grade_card(card, 4, today="2026-09-01")
+        self.assertEqual(graded.interval, 15)
+        self.assertEqual(graded.repetitions, 3)
+
+    def test_lapse_resets_repetitions_and_interval(self):
+        card = Card(front="Q", back="A", interval=15, repetitions=3, efactor=2.5)
+        graded = grade_card(card, 2, today="2026-09-01")
+        self.assertEqual(graded.interval, 1)
+        self.assertEqual(graded.repetitions, 0)
+        self.assertEqual(graded.due, "2026-09-02")
+
+    def test_efactor_never_drops_below_1_3(self):
+        card = Card(front="Q", back="A", efactor=1.3)
+        graded = grade_card(card, 0, today="2026-09-01")
+        self.assertEqual(graded.efactor, 1.3)
+
+    def test_perfect_recall_raises_efactor(self):
+        card = Card(front="Q", back="A", efactor=2.5)
+        graded = grade_card(card, 5, today="2026-09-01")
+        self.assertGreater(graded.efactor, 2.5)
+
+    def test_original_card_is_not_mutated(self):
+        card = Card(front="Q", back="A")
+        grade_card(card, 5, today="2026-09-01")
+        self.assertEqual(card.interval, 0)
+        self.assertEqual(card.repetitions, 0)
+        self.assertIsNone(card.due)
+
+    def test_rejects_quality_out_of_range(self):
+        with self.assertRaises(ValueError):
+            grade_card(Card(front="Q", back="A"), 6)
+
+    def test_rejects_non_integer_quality(self):
+        with self.assertRaises(ValueError):
+            grade_card(Card(front="Q", back="A"), 4.5)
+
+    def test_today_defaults_to_real_current_date(self):
+        graded = grade_card(Card(front="Q", back="A"), 4)
+        self.assertIsNotNone(graded.due)
 
 
 if __name__ == "__main__":
