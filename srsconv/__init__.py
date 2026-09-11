@@ -35,6 +35,13 @@ SEPARATORS = {
     "space": " ",
 }
 
+# Roles Anki's export dialog can add as extra columns ahead of a note's own
+# fields, each announced by a '#<role> column:<n>' header line (1-based n).
+# Checking "Include tags/deck/notetype/guid" in the export shifts every
+# field after it over by one column, so front/back can't be assumed to be
+# columns 0 and 1 - they're whichever columns none of these headers claim.
+COLUMN_ROLES = ("guid", "notetype", "deck", "tags")
+
 
 class FormatError(ValueError):
     """Input doesn't match the expected format."""
@@ -114,18 +121,38 @@ def _join_row(fields: list, delimiter: str) -> str:
     return buf.getvalue()
 
 
+def _parse_column_header(line: str) -> "tuple[str, int] | None":
+    """Match a '#<role> column:<n>' header line, returning (role, 0-based index)."""
+    for role in COLUMN_ROLES:
+        prefix = f"#{role} column:"
+        if line.startswith(prefix):
+            value = line[len(prefix):].strip()
+            if not value.isdigit() or value == "0":
+                raise FormatError(f"invalid column index in header: {line!r}")
+            return role, int(value) - 1
+    return None
+
+
 def parse_anki_txt(text: str) -> list:
     """Parse an Anki notes export into Cards.
 
     Header lines (starting with '#') are read for '#separator:' (tab,
     comma, semicolon, pipe, colon, or space - the names Anki itself
     writes there; tab is assumed if the header is absent) and '#html:'
-    to decide whether '<br>' in a field means a line break. Columns are
-    front, back, and an optional tags column (space-separated tags); an
-    empty or missing tags column means no tags.
+    to decide whether '<br>' in a field means a line break.
+
+    Checking "Include tags/deck/notetype/guid" in Anki's export dialog
+    adds a '#<role> column:<n>' header for each one and inserts it as its
+    own column, which shifts every field after it over. Those columns are
+    located by their headers rather than assumed to be absent; front and
+    back are whichever two columns are left after guid/notetype/deck/tags
+    are accounted for. Without a '#tags column:' header, tags fall back
+    to the third remaining column, matching a plain front/back/tags
+    export; a missing or blank tags column means no tags.
     """
     html_mode = True
     delimiter = "\t"
+    column_index = {}
     rows = []
     in_header = True
     for line in text.splitlines():
@@ -137,6 +164,10 @@ def parse_anki_txt(text: str) -> list:
                 if name not in SEPARATORS:
                     raise FormatError(f"unsupported #separator value: {name!r}")
                 delimiter = SEPARATORS[name]
+            else:
+                parsed = _parse_column_header(line)
+                if parsed:
+                    column_index[parsed[0]] = parsed[1]
             continue
         # Header directives only appear before the first data row, so a
         # card whose front field happens to start with '#' (e.g. a C
@@ -146,13 +177,20 @@ def parse_anki_txt(text: str) -> list:
             continue
         rows.append(line)
 
+    reserved = set(column_index.values())
+    explicit_tags_col = column_index.get("tags")
+
     cards = []
     for line in rows:
         parts = _split_row(line, delimiter)
-        if len(parts) < 2:
+        field_cols = [i for i in range(len(parts)) if i not in reserved]
+        if len(field_cols) < 2:
             raise FormatError(f"expected front and back columns, got: {line!r}")
-        front, back = parts[0], parts[1]
-        tags_field = parts[2] if len(parts) > 2 else ""
+        front, back = parts[field_cols[0]], parts[field_cols[1]]
+        if explicit_tags_col is not None:
+            tags_field = parts[explicit_tags_col] if explicit_tags_col < len(parts) else ""
+        else:
+            tags_field = parts[field_cols[2]] if len(field_cols) > 2 else ""
         if html_mode:
             front = front.replace("<br>", "\n")
             back = back.replace("<br>", "\n")

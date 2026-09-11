@@ -103,6 +103,35 @@ class TestAnkiTxt(unittest.TestCase):
         with self.assertRaises(FormatError):
             write_anki_txt([Card(front="Q", back="A")], separator="tilde")
 
+    def test_notetype_and_deck_columns_dont_get_mistaken_for_fields(self):
+        text = (
+            ANKI_HEADER
+            + "#notetype column:1\n#deck column:2\n"
+            + "Basic\tDefault\tWhat is 2+2?\t4\n"
+        )
+        self.assertEqual(
+            parse_anki_txt(text), [Card(front="What is 2+2?", back="4")]
+        )
+
+    def test_explicit_tags_column_used_over_positional_fallback(self):
+        text = (
+            ANKI_HEADER
+            + "#notetype column:1\n#tags column:2\n"
+            + "Basic\tgeography::europe\tCapital of France?\tParis\n"
+        )
+        self.assertEqual(
+            parse_anki_txt(text),
+            [Card(front="Capital of France?", back="Paris", tags=("geography::europe",))],
+        )
+
+    def test_guid_column_is_skipped(self):
+        text = ANKI_HEADER + "#guid column:1\n" + "abc123\tTerm\tDefinition\n"
+        self.assertEqual(parse_anki_txt(text), [Card(front="Term", back="Definition")])
+
+    def test_parse_rejects_non_numeric_column_header(self):
+        with self.assertRaises(FormatError):
+            parse_anki_txt(ANKI_HEADER + "#deck column:one\nQ\tA\n")
+
 
 # Each case: (name, anki_txt_body, expected_cards)
 ANKI_COMMA_PARSE_CASES = [

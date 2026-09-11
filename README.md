@@ -95,6 +95,12 @@ personal app's review loop, not part of the anki2json/json2anki pipeline.
 - `#` lines are only read as header directives before the first data
   row; a card whose front field happens to start with `#` (a code
   snippet, a hashtag) is parsed as a normal card, not swallowed.
+- Checking "Include tags/deck/notetype/guid" in Anki's export dialog
+  adds a `#<role> column:<n>` header line and its own column for each
+  one, shifting every field after it over. The importer locates those
+  columns by their headers rather than assuming front/back are always
+  columns 1 and 2; guid, notetype, and deck values are read past and
+  discarded, since this project's Card has no fields for them.
 - `sm2json`'s `due` is `null` for a card that has never been scheduled.
 
 ## Development
